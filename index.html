@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>When Two Patients Click Book — Transaction Management in Hospital Appointments</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="brand"><span class="brand-mark">DB</span><span>DBMS<span class="muted"> / BLOG</span></span></div>
+  <nav><a href="#story">Story</a><a href="#transactions">Transactions</a><a href="#conflict">Conflict</a><a href="#serial">Serializability</a><a href="#demo">Demo</a><a href="#conclusion">Conclusion</a></nav>
+</header>
+
+<main>
+<section class="cover" id="story">
+  <div class="cover-inner">
+    <div class="eyebrow">DBMS • TRANSACTION MANAGEMENT • MINI PROJECT</div>
+    <h1>When two patients click <em>Book</em> at the same time.</h1>
+    <p class="lead">How transaction management prevents double-booking in a hospital appointment system using concurrency control, locking and serializability.</p>
+    <div class="meta"><span>⏱ 8 min read</span><span>•</span><span>Interactive case study</span><span>•</span><span>2nd Year DBMS Project</span></div>
+    <a class="read-btn" href="#intro">Read the case study ↓</a>
+  </div>
+</section>
+
+<section class="article" id="intro">
+  <div class="kicker">01 — THE PROBLEM</div>
+  <h2>A simple booking can become a database problem.</h2>
+  <p>Imagine a hospital where <strong>Dr. Sharma</strong> has one appointment slot available at <strong>10:00 AM</strong>. At almost exactly the same moment, Patient A and Patient B open the appointment page and press <strong>Book</strong>.</p>
+  <div class="quote">“The slot was available when I checked.”<br><span>— Patient A and Patient B, simultaneously</span></div>
+  <p>This is a classic <strong>concurrency problem</strong>. Both requests are separate database transactions, but both are trying to change the same piece of data. Without proper transaction management, the hospital can end up with an inconsistent appointment schedule.</p>
+
+  <div class="two-column">
+    <div class="info-card">
+      <span class="number">A</span><h3>Patient A</h3>
+      <p>Reads the 10:00 AM slot and sees <strong>AVAILABLE</strong>.</p>
+    </div>
+    <div class="info-card">
+      <span class="number">B</span><h3>Patient B</h3>
+      <p>Reads the same slot before Patient A's update is protected and also sees <strong>AVAILABLE</strong>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="dark-section" id="transactions">
+  <div class="article">
+    <div class="kicker light">02 — TRANSACTION BASICS</div>
+    <h2>Think of a booking as one complete transaction.</h2>
+    <p>A <strong>transaction</strong> is a logical unit of database work. For an appointment booking, it can be represented as a sequence of operations:</p>
+    <div class="code-flow">
+      <span>BEGIN</span><b>→</b><span>READ SLOT</span><b>→</b><span>CHECK</span><b>→</b><span>WRITE BOOKED</span><b>→</b><span>COMMIT</span>
+    </div>
+    <p>If something goes wrong before commit, the transaction can be rolled back. This keeps the appointment data from being left in an incorrect state.</p>
+    <div class="acid">
+      <div><b>A</b><strong>Atomicity</strong><span>Booking completes fully or is rolled back.</span></div>
+      <div><b>C</b><strong>Consistency</strong><span>The appointment schedule remains valid.</span></div>
+      <div><b>I</b><strong>Isolation</strong><span>Concurrent bookings do not corrupt each other.</span></div>
+      <div><b>D</b><strong>Durability</strong><span>A committed booking is preserved in a real database.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="article" id="conflict">
+  <div class="kicker">03 — THE CONFLICT</div>
+  <h2>Where exactly do the transactions conflict?</h2>
+  <p>Let <code>S</code> represent the 10:00 AM appointment slot. Both transactions access the same data item.</p>
+  <div class="schedule">
+    <div class="schedule-head"><span>Transaction T1 — Patient A</span><span>Transaction T2 — Patient B</span></div>
+    <div class="schedule-row"><div>READ(S)</div><div>READ(S)</div></div>
+    <div class="schedule-row"><div>CHECK: AVAILABLE</div><div>CHECK: AVAILABLE</div></div>
+    <div class="schedule-row conflict-row"><div>WRITE(S = A)</div><div>WRITE(S = B)</div></div>
+    <div class="schedule-row"><div>COMMIT</div><div>COMMIT</div></div>
+  </div>
+  <p class="caption">The highlighted row shows the dangerous part: both transactions write the same appointment record.</p>
+
+  <div class="conflict-grid">
+    <div><h3>Read → Write</h3><p>A transaction reads data that another transaction later changes.</p></div>
+    <div><h3>Write → Read</h3><p>One transaction changes data that another transaction reads.</p></div>
+    <div><h3>Write → Write</h3><p>Both transactions try to update the same slot. This is the key conflict in our example.</p></div>
+  </div>
+</section>
+
+<section class="paper-section">
+  <div class="article">
+    <div class="kicker">04 — THE ANOMALY</div>
+    <h2>Without control, “available” can be true twice.</h2>
+    <div class="storyboard">
+      <div class="story-step"><small>STEP 01</small><b>T1 reads</b><span>10:00 AM = AVAILABLE</span></div>
+      <div class="arrow">→</div>
+      <div class="story-step"><small>STEP 02</small><b>T2 reads</b><span>10:00 AM = AVAILABLE</span></div>
+      <div class="arrow">→</div>
+      <div class="story-step danger-step"><small>STEP 03</small><b>Both write</b><span>Two patients think they booked it</span></div>
+    </div>
+    <div class="warning"><strong>Problem:</strong> the database has lost the guarantee that one appointment slot belongs to only one patient.</div>
+  </div>
+</section>
+
+<section class="article" id="serial">
+  <div class="kicker">05 — SERIALIZABILITY</div>
+  <h2>Make concurrent work behave like a safe serial order.</h2>
+  <p><strong>Serializability</strong> means that the final effect of concurrent transactions should be equivalent to some correct serial execution. For this case, a safe order is:</p>
+  <div class="serial-order"><span>T1</span><i>Patient A books first</i><b>→</b><span>T2</span><i>Patient B checks after T1</i></div>
+  <p>Once T1 commits, T2 sees <strong>BOOKED</strong> and cannot assign the same slot to Patient B. The transactions may have arrived concurrently, but their conflicting operations are controlled in a serializable order.</p>
+
+  <div class="graph-card">
+    <h3>Precedence Graph</h3>
+    <svg viewBox="0 0 720 230">
+      <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z"></path></marker></defs>
+      <line x1="265" y1="115" x2="455" y2="115" class="svg-edge" marker-end="url(#arrow)"></line>
+      <circle cx="210" cy="115" r="50" class="svg-node"></circle>
+      <circle cx="510" cy="115" r="50" class="svg-node"></circle>
+      <text x="210" y="122" text-anchor="middle">T1</text><text x="510" y="122" text-anchor="middle">T2</text>
+      <text x="360" y="92" text-anchor="middle" class="svg-label">conflicting operation</text>
+    </svg>
+    <p><strong>No cycle:</strong> the graph gives the serial order T1 → T2, so the controlled schedule is conflict-serializable.</p>
+  </div>
+</section>
+
+<section class="dark-section">
+  <div class="article">
+    <div class="kicker light">06 — THE SOLUTION</div>
+    <h2>Lock the appointment before changing it.</h2>
+    <p>An <strong>exclusive lock</strong> prevents another transaction from modifying the same appointment record while the first transaction is using it.</p>
+    <div class="lock-flow">
+      <div><b>T1</b><span>Acquire X-Lock</span><span>Read</span><span>Write BOOKED</span><span>Commit</span><span>Release</span></div>
+      <div class="lock-divider">↓</div>
+      <div><b>T2</b><span>Try X-Lock</span><span>Wait</span><span>Read BOOKED</span><span>Rollback / Reject</span></div>
+    </div>
+    <p class="solution-note">The important idea is not that T2 disappears. It waits until the conflicting operation is safely completed, then works with the latest value.</p>
+  </div>
+</section>
+
+<section class="article" id="demo">
+  <div class="kicker">07 — INTERACTIVE DEMO</div>
+  <h2>Now break it — then fix it.</h2>
+  <p>Use the simulator below. Keep both patients on the same doctor and time to create a conflict. First run the unsafe schedule, then reset and run the controlled schedule.</p>
+
+  <div class="demo-panel">
+    <div class="demo-top">
+      <div><small>TRANSACTION T1</small><input id="p1" value="Patient A"><select id="d1"></select><select id="t1"></select></div>
+      <div class="versus">VS</div>
+      <div><small>TRANSACTION T2</small><input id="p2" value="Patient B"><select id="d2"></select><select id="t2"></select></div>
+    </div>
+    <div class="demo-actions"><button class="unsafe" onclick="runUnsafe()">Run unsafe schedule</button><button class="safe" onclick="runSafe()">Run with locking</button><button class="reset" onclick="resetDemo()">Reset</button></div>
+    <div class="demo-output">
+      <div><h3>Transaction timeline</h3><div id="log" class="terminal">Choose a simulation above…</div></div>
+      <div><h3>Database state</h3><div id="dbstate" class="db-state"><div><span>Dr. Sharma</span><b>10:00 AM</b><em id="slotState">AVAILABLE</em></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="article">
+  <div class="kicker">08 — SYSTEM FLOW</div>
+  <h2>From patient request to a consistent schedule.</h2>
+  <div class="flowchart">
+    <div>Patient selects doctor & time</div><i>↓</i>
+    <div>Transaction begins</div><i>↓</i>
+    <div>Check appointment record</div><i>↓</i>
+    <div class="blue">Acquire exclusive lock</div><i>↓</i>
+    <div>Update slot to BOOKED</div><i>↓</i>
+    <div class="blue">COMMIT transaction</div><i>↓</i>
+    <div>Release lock</div>
+  </div>
+</section>
+
+<section class="article">
+  <div class="kicker">09 — WHY IT MATTERS</div>
+  <h2>This pattern appears far beyond hospitals.</h2>
+  <div class="use-cases">
+    <div><b>✦ Railway booking</b><span>Two users cannot reserve the same seat.</span></div>
+    <div><b>✦ Ticket booking</b><span>One ticket inventory item cannot be sold twice.</span></div>
+    <div><b>✦ Banking</b><span>Concurrent balance updates must remain correct.</span></div>
+    <div><b>✦ Online shopping</b><span>Limited-stock products need safe updates.</span></div>
+  </div>
+</section>
+
+<section class="article conclusion" id="conclusion">
+  <div class="kicker">10 — TAKEAWAY</div>
+  <h2>One slot. One winner. One consistent database.</h2>
+  <p>Hospital appointment booking looks simple from the user's screen, but behind that screen the DBMS must coordinate concurrent transactions. By identifying conflicting operations, applying locks and maintaining a serializable execution order, transaction management prevents double-booking and keeps the appointment schedule consistent.</p>
+  <div class="takeaway"><span>READ</span><b>→</b><span>LOCK</span><b>→</b><span>WRITE</span><b>→</b><span>COMMIT</span><b>→</b><span>RELEASE</span></div>
+</section>
+
+<section class="references article">
+  <div class="kicker">REFERENCES</div>
+  <h2>Further reading</h2>
+  <ol>
+    <li>Abraham Silberschatz, Henry F. Korth, S. Sudarshan — <em>Database System Concepts</em>.</li>
+    <li>Ramez Elmasri, Shamkant B. Navathe — <em>Fundamentals of Database Systems</em>.</li>
+    <li>DBMS course notes on transactions, concurrency control and serializability.</li>
+  </ol>
+</section>
+</main>
+
+<footer><div>DBMS BLOG PROJECT</div><span>Hospital Appointment System • Transaction Management</span></footer>
+<script src="js/script.js"></script>
+</body>
+</html>
